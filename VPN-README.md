@@ -1,0 +1,82 @@
+# VPN Server Scripts — JepongDevxyz
+
+All-in-one VPN/tunnel server installer para sa Ubuntu 22.04/24.04 VPS.
+
+## Bago tumakbo: DNS setup
+
+Sa domain registrar mo (o Cloudflare), gawin ITO MUNA:
+
+| Type | Name | Value |
+|------|------|-------|
+| A | `vpn.example.com` | IP ng VPS mo |
+| A | `ns.vpn.example.com` | IP ng VPS mo |
+| NS | `t.vpn.example.com` | `ns.vpn.example.com` |
+
+Palitan ang `vpn.example.com` ng sarili mong domain. Maghintay ng 5-15 minuto
+para mag-propagate ang DNS.
+
+## Install
+
+```bash
+sudo bash vpn-server.sh vpn.example.com t.vpn.example.com
+```
+
+Mga 10-20 minuto ito sa unang takbo (maraming ida-download at iko-compile).
+
+## Ano ang naka-install
+
+| Service | Port | Detalye |
+|---------|------|---------|
+| OpenSSH | 22/tcp | normal SSH |
+| Dropbear | 109, 143/tcp | lightweight SSH (pang-tunnel) |
+| OpenVPN | 1194/udp | client file: `/root/jepong.ovpn` |
+| Xray VLESS | 443/tcp (TLS+WS, path `/vless`) | UUID nasa summary |
+| Xray VMess | 443/tcp (TLS+WS, path `/vmess`) | UUID nasa summary |
+| Xray Trojan | 443/tcp (TLS+WS, path `/trojan`) | password nasa summary |
+| UDP Custom | 36712/udp (range 25000-26000) | PSK nasa summary |
+| SlowDNS (dnstt) | 53/udp | public key nasa summary |
+| SSH WebSocket | 8080/tcp | `ws://domain:8080` -> SSH |
+| nginx | 80, 443/tcp | reverse proxy + Let's Encrypt SSL |
+
+Plus: BBR congestion control, UFW firewall, fail2ban.
+
+Pagkatapos ng install, ipi-print ng script ang LAHAT ng credentials
+(UUIDs, passwords, PSK, SlowDNS public key, VLESS/Trojan links).
+Itago ang mga ito — nasa `/etc/jepongvpn/` din (root-only).
+
+## Magdagdag ng user
+
+```bash
+sudo bash vpn-adduser.sh <username> [araw] [password]
+# hal: sudo bash vpn-adduser.sh jepong1 30
+```
+
+Gumagawa ng SSH user na may expiry date. Default 30 araw, random password
+kapag hindi binigyan.
+
+## Client apps na pwede
+
+- **OpenVPN**: OpenVPN Connect (Android/iOS/PC) — import `/root/jepong.ovpn`
+- **Xray**: v2rayNG / Nekoray / Streisand — gamitin ang links sa summary
+- **SlowDNS**: SlowDNS app / HTTP Custom (SlowDNS mode) — NS domain + public key + SSH user
+- **SSH/WS**: HTTP Custom / KPN Tunnel — `ws://domain:8080`, SSH user
+- **UDP Custom**: Stun client (NNdroid) o kahit anong udp_custom-compatible client — PSK + port 36712
+
+## Tungkol sa "UDP"
+
+Ang gamit dito ay **udp_custom** (NNdroid, open-source, GPL-3.0) — modernong
+UDP tunnel na may sariling protocol. Hindi ito compatible sa lumang
+"UDP Custom" mode ng ibang apps; gumamit ng Stun client o udp_custom client.
+
+## Na-test
+
+- `bash -n` sa lahat ng scripts — pasado
+- **ssh-ws.py**: tunay na functional test — HTTP 101 handshake, tamang
+  Sec-WebSocket-Accept, bidirectional relay, 10 sabay na connections — pasado
+- **Xray config**: na-validate gamit ang TUNAY na xray binary
+  (`xray run -test`) — "Configuration OK"
+- **vpn-adduser.sh**: isolated test — user creation, expiry, duplicate at
+  usage errors — pasado
+- Hindi na-test sa totoong VPS (walang public IP dito): ang OpenVPN
+  headless install, dnstt build, at udp_custom install ay galing sa
+  official documented methods ng bawat project.
