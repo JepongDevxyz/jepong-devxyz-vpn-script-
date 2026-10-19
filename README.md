@@ -14,6 +14,16 @@ Halimbawa:
 sudo ./vpn-server.sh vpn.example.com t.vpn.example.com
 ```
 
+## Debian version
+
+May `vpn-server-debian.sh` para sa Debian 11/12 — parehong features, parehong menu:
+
+```bash
+curl -fsSL -o vpn-server-debian.sh "https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main/vpn-server-debian.sh?cb=$(date +%s)" && chmod +x vpn-server-debian.sh && sudo ./vpn-server-debian.sh <domain> <ns-domain>
+```
+
+> Beta pa ang Debian version — hindi pa nasusubukan sa tunay na Debian VPS. Ang Ubuntu version ang battle-tested.
+
 ## SSH password login (optional)
 
 Gusto mo ng user/pass sa Termius imbes na SSH key? Maglagay ng `SSH_PASSWORD`:
