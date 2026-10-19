@@ -2,16 +2,16 @@
 
 All-in-one VPN/tunnel server installer para sa Ubuntu 22.04/24.04 VPS.
 
-## One-line install
+## One-line install (Ubuntu)
 
 ```bash
-curl -fsSL -o vpn-server.sh "https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main/vpn-server.sh?cb=$(date +%s)" && chmod +x vpn-server.sh && sudo ./vpn-server.sh <domain> <ns-domain>
+curl -fsSL -o vpn-server-ubuntu.sh "https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main/vpn-server-ubuntu.sh?cb=$(date +%s)" && chmod +x vpn-server-ubuntu.sh && sudo ./vpn-server-ubuntu.sh <domain> <ns-domain>
 ```
 
 Halimbawa:
 
 ```bash
-sudo ./vpn-server.sh vpn.example.com t.vpn.example.com
+sudo ./vpn-server-ubuntu.sh vpn.example.com t.vpn.example.com
 ```
 
 ## Debian version
@@ -29,7 +29,7 @@ curl -fsSL -o vpn-server-debian.sh "https://raw.githubusercontent.com/JepongDevx
 Gusto mo ng user/pass sa Termius imbes na SSH key? Maglagay ng `SSH_PASSWORD`:
 
 ```bash
-sudo SSH_PASSWORD='matibay-na-password-mo' ./vpn-server.sh vpn.example.com t.vpn.example.com
+sudo SSH_PASSWORD='matibay-na-password-mo' ./vpn-server-ubuntu.sh vpn.example.com t.vpn.example.com
 ```
 
 Bawal ang `:` sa password. Aktibo ang fail2ban kaya protektado laban sa brute force —
