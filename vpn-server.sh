@@ -68,9 +68,14 @@ log "Step 1/11: system update + essentials..."
 echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections
 echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | debconf-set-selections
 apt-get update -qq
-apt-get upgrade -y -qq
+# Ayusin muna ang anumang sira/half-configured packages (karaniwang sanhi ng "held broken packages")
+dpkg --configure -a 2>/dev/null || true
+apt-get install -y -qq --fix-broken 2>/dev/null || true
+# Ang upgrade ay hindi fatal — huwag patayin ang buong install kapag ito pumalya
+apt-get upgrade -y -qq || warn "apt-get upgrade pumalya — tutuloy pa rin sa pag-install ng packages."
 apt-get install -y -qq curl wget git python3 ufw fail2ban nginx certbot python3-certbot-nginx \
-  dropbear openssh-server dnsutils iptables-persistent netfilter-persistent
+  dropbear openssh-server dnsutils iptables-persistent netfilter-persistent \
+  || die "apt-get install pumalya pa rin — patakbuhin muna: sudo dpkg --configure -a && sudo apt-get install -y --fix-broken"
 
 # =============================================================================
 log "Step 2/11: palayain ang port 53 (disable systemd-resolved stub)..."
