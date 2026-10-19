@@ -185,6 +185,9 @@ fi
 mkdir -p /etc/jepongvpn
 printf '%s\n%s\n%s\n' "$UUID_VLESS" "$UUID_VMESS" "$TROJAN_PASS" > /etc/jepongvpn/xray-creds.txt
 chmod 600 /etc/jepongvpn/xray-creds.txt
+printf '%s\n' "$DOMAIN" > /etc/jepongvpn/domain.txt
+printf '%s\n' "$NSDOMAIN" > /etc/jepongvpn/nsdomain.txt
+chmod 600 /etc/jepongvpn/domain.txt /etc/jepongvpn/nsdomain.txt
 
 # =============================================================================
 log "Step 6/11: nginx + Let's Encrypt SSL para sa $DOMAIN..."
@@ -438,14 +441,16 @@ else
 fi
 svc enable fail2ban; svc start fail2ban
 
-# vpn-adduser helper — kunin mula sa GitHub repo para isang install lang
-HELPER_URL="https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main/vpn-adduser.sh"
-if curl -fsSL -o /usr/local/bin/vpn-adduser "$HELPER_URL"; then
-  chmod +x /usr/local/bin/vpn-adduser
-  log "vpn-adduser installed."
-else
-  warn "hindi na-download ang vpn-adduser helper mula sa $HELPER_URL"
-fi
+# vpn-adduser + vpn-menu helpers — kunin mula sa GitHub repo para isang install lang
+HELPER_BASE="https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main"
+for h in vpn-adduser vpn-menu; do
+  if curl -fsSL -o "/usr/local/bin/$h" "$HELPER_BASE/$h.sh"; then
+    chmod +x "/usr/local/bin/$h"
+    log "$h installed."
+  else
+    warn "hindi na-download ang $h helper mula sa $HELPER_BASE/$h.sh"
+  fi
+done
 
 # =============================================================================
 echo ""

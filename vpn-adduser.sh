@@ -24,6 +24,11 @@ EXPIRY="$(date -d "+$DAYS days" +%Y-%m-%d)"
 useradd -m -s /bin/false -e "$EXPIRY" "$USER"
 echo "$USER:$PASS" | chpasswd
 
+# Irehistro para mahanap ng vpn-menu
+mkdir -p /etc/jepongvpn
+touch /etc/jepongvpn/users.db && chmod 600 /etc/jepongvpn/users.db
+grep -qx "$USER" /etc/jepongvpn/users.db 2>/dev/null || echo "$USER" >> /etc/jepongvpn/users.db
+
 echo "OK: user $USER nilikha."
 echo "  Username : $USER"
 echo "  Password : $PASS"

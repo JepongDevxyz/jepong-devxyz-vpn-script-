@@ -44,6 +44,28 @@ sa `/usr/local/bin` — gumawa ng VPN users na may expiry:
 sudo vpn-adduser <username> [araw]
 ```
 
+## VPN Menu
+
+Pagkatapos ng install, may interactive menu — tulad ng mga classic installer:
+
+```bash
+sudo vpn-menu
+```
+
+```
+=======================================
+    JEPONG DEVXYZ VPS SCRIPT
+=======================================
+  1) Create Account
+  2) Check Account
+  3) Delete Account
+  4) VPN Details
+  5) Service Status
+  6) Restart Services
+  0) Exit
+=======================================
+```
+
 ## Kailangan bago tumakbo
 
 | Type | Name | Value |
