@@ -5,7 +5,7 @@ All-in-one VPN/tunnel server installer para sa Ubuntu 22.04/24.04 VPS.
 ## One-line install
 
 ```bash
-curl -fsSL -o vpn-server.sh https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main/vpn-server.sh && chmod +x vpn-server.sh && sudo ./vpn-server.sh <domain> <ns-domain>
+curl -fsSL -o vpn-server.sh "https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main/vpn-server.sh?cb=$(date +%s)" && chmod +x vpn-server.sh && sudo ./vpn-server.sh <domain> <ns-domain>
 ```
 
 Halimbawa:
