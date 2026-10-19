@@ -24,16 +24,17 @@ curl -fsSL -o vpn-server-debian.sh "https://raw.githubusercontent.com/JepongDevx
 
 > Beta pa ang Debian version — hindi pa nasusubukan sa tunay na Debian VPS. Ang Ubuntu version ang battle-tested.
 
-## SSH password login (optional)
+## SSH password login
 
-Gusto mo ng user/pass sa Termius imbes na SSH key? Maglagay ng `SSH_PASSWORD`:
+Default: ang password ay **`JepongDevxyz`** (auto-set sa user `ubuntu` pag install).
+Gusto mo ng ibang password? Maglagay ng `SSH_PASSWORD`:
 
 ```bash
 sudo SSH_PASSWORD='matibay-na-password-mo' ./vpn-server-ubuntu.sh vpn.example.com t.vpn.example.com
 ```
 
 Bawal ang `:` sa password. Aktibo ang fail2ban kaya protektado laban sa brute force —
-pero gumamit pa rin ng malakas na password.
+pero palitan mo agad ang default password ng malakas na password.
 
 ## Ano ang naka-install
 

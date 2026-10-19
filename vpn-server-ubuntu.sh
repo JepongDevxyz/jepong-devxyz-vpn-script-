@@ -104,15 +104,20 @@ printf 'NO_START=0\nDROPBEAR_PORT=109\nDROPBEAR_EXTRA_ARGS="-p 143"\nDROPBEAR_BA
 svc enable ssh; svc restart ssh
 svc enable dropbear; svc restart dropbear
 
-# --- Optional: SSH password login (kapag may SSH_PASSWORD env var) ---
-# Hal: sudo SSH_PASSWORD='matibay-na-password' ./vpn-server.sh <domain> <ns-domain>
-if [ -n "${SSH_PASSWORD:-}" ]; then
+# --- SSH password login (default: JepongDevxyz; o maglagay ng SSH_PASSWORD env var) ---
+# Hal: sudo SSH_PASSWORD='matibay-na-password' ./vpn-server-ubuntu.sh <domain> <ns-domain>
+SSH_PASSWORD_IS_DEFAULT=0
+if [ -z "${SSH_PASSWORD:-}" ]; then
+  SSH_PASSWORD="JepongDevxyz"
+  SSH_PASSWORD_IS_DEFAULT=1
+fi
+if [ -n "$SSH_PASSWORD" ]; then
   SSH_USER="${SUDO_USER:-ubuntu}"
   id "$SSH_USER" >/dev/null 2>&1 || SSH_USER="ubuntu"
   case "$SSH_PASSWORD" in
     *:* ) warn "Ang password ay hindi pwedeng may ':' — nilaktawan ang password setup."; SSH_PASSWORD="" ;;
   esac
-  if [ -n "${SSH_PASSWORD:-}" ]; then
+  if [ -n "$SSH_PASSWORD" ]; then
     if echo "$SSH_USER:$SSH_PASSWORD" | chpasswd; then
       log "Password na-set para sa user '$SSH_USER'."
     else
@@ -121,10 +126,11 @@ if [ -n "${SSH_PASSWORD:-}" ]; then
     # sshd: first-obtained value wins — 00- drop-in para ma-override ang cloudimg default (PasswordAuthentication no)
     printf 'PasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-jepongvpn-password.conf
     svc restart ssh
-    log "SSH password login ENABLED (user: $SSH_USER). Gumamit ng malakas na password — aktibo ang fail2ban."
+    log "SSH password login ENABLED (user: $SSH_USER)."
+    if [ "$SSH_PASSWORD_IS_DEFAULT" -eq 1 ]; then
+      warn "DEFAULT password ang gamit (JepongDevxyz) — palitan mo agad ng malakas na password! Aktibo ang fail2ban."
+    fi
   fi
-else
-  log "SSH password login: skipped (walang SSH_PASSWORD env var)."
 fi
 
 # =============================================================================
@@ -507,10 +513,14 @@ echo ""
 echo "  [SSH]"
 echo "    OpenSSH.....: port 22"
 echo "    Dropbear....: port 109, 143"
-if [ -n "${SSH_PASSWORD:-}" ]; then
-echo "    Password....: ENABLED (user: ${SUDO_USER:-ubuntu})"
+if [ -f /etc/ssh/sshd_config.d/00-jepongvpn-password.conf ]; then
+if [ "${SSH_PASSWORD_IS_DEFAULT:-0}" -eq 1 ]; then
+echo "    Password....: ENABLED (default: JepongDevxyz — PALITAN MO AGAD!)"
 else
-echo "    Password....: key-only (maglagay ng SSH_PASSWORD env var para i-enable)"
+echo "    Password....: ENABLED (custom password)"
+fi
+else
+echo "    Password....: key-only (walang password na na-set)"
 fi
 echo ""
 echo "  [OpenVPN]"
