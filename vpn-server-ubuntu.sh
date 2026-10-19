@@ -489,8 +489,9 @@ svc enable fail2ban; svc start fail2ban
 
 # vpn-adduser + vpn-menu helpers — kunin mula sa GitHub repo para isang install lang
 HELPER_BASE="https://raw.githubusercontent.com/JepongDevxyz/jepong-devxyz-vpn-script-/main"
+HELPER_CB="$(date +%s)"
 for h in vpn-adduser vpn-menu; do
-  if curl -fsSL -o "/usr/local/bin/$h" "$HELPER_BASE/$h.sh"; then
+  if curl -fsSL -o "/usr/local/bin/$h" "$HELPER_BASE/$h.sh?cb=$HELPER_CB"; then
     chmod +x "/usr/local/bin/$h"
     log "$h installed."
   else
