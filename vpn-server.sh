@@ -379,9 +379,40 @@ DNSTT_PUB="$(cat /etc/dnstt/server.pub)"
 
 # =============================================================================
 log "Step 9/11: UDP Custom server (udp_custom)..."
-curl -fsSL -o /tmp/udp-custom-install.sh \
-  https://raw.githubusercontent.com/NNdroid/udp_custom/master/scripts/install.sh
-bash /tmp/udp-custom-install.sh install server
+# I-build mula sa source — walang GitHub releases ang udp_custom repo (404 sa install.sh).
+UDP_OK=0
+if [ ! -x /usr/local/bin/udp_custom ]; then
+  if rm -rf /opt/udp_custom \
+    && git clone --depth 1 https://github.com/NNdroid/udp_custom.git /opt/udp_custom \
+    && (cd /opt/udp_custom && CGO_ENABLED=0 /usr/local/go/bin/go build -o /usr/local/bin/udp_custom .) \
+    && chmod +x /usr/local/bin/udp_custom; then
+    log "udp_custom na-build mula sa source."
+    UDP_OK=1
+  else
+    warn "udp_custom build pumalya — lalaktawan ang UDP Custom (ibang services OK)."
+  fi
+else
+  UDP_OK=1
+fi
+if [ "$UDP_OK" -eq 1 ]; then
+mkdir -p /etc/udp_custom
+cat > /etc/systemd/system/udp_custom.service <<'SVCEOF'
+[Unit]
+Description=udp_custom UDPCustom Stream Tunnel Server
+After=network.target
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/udp_custom
+ExecStart=/usr/local/bin/udp_custom -c /etc/udp_custom/config.server.json
+Restart=always
+RestartSec=3s
+LimitNOFILE=1048576
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+if [ "$HAS_SYSTEMD" -eq 1 ]; then systemctl daemon-reload; fi
+svc enable udp_custom
 UDP_PSK="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 python3 - "$DOMAIN" "$UDP_PSK" <<'PYEOF' > /etc/udp_custom/config.server.json
 import json, sys
@@ -412,6 +443,7 @@ iptables -t nat -C PREROUTING -p udp --dport 25000:26000 -j REDIRECT --to-ports 
 netfilter-persistent save >/dev/null 2>&1 || iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
 printf '%s\n' "$UDP_PSK" > /etc/jepongvpn/udp-psk.txt
 chmod 600 /etc/jepongvpn/udp-psk.txt
+fi # UDP_OK
 
 # =============================================================================
 log "Step 10/11: BBR congestion control..."
@@ -479,7 +511,11 @@ echo "    Trojan pass.: $TROJAN_PASS"
 echo "    Trojan link.: trojan://$TROJAN_PASS@$DOMAIN:443?path=%2Ftrojan&security=tls&type=ws#$DOMAIN-trojan"
 echo ""
 echo "  [UDP Custom]"
-echo "    Port 36712 (range 25000-26000), PSK: $UDP_PSK"
+if [ -f /etc/jepongvpn/udp-psk.txt ]; then
+echo "    Port 36712 (range 25000-26000), PSK: $(cat /etc/jepongvpn/udp-psk.txt)"
+else
+echo "    HINDI NA-INSTALL (build pumalya) — ibang services OK"
+fi
 echo ""
 echo "  [SlowDNS]"
 echo "    NS domain...: $NSDOMAIN (UDP 53)"
