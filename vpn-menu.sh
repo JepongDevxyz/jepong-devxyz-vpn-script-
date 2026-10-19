@@ -36,8 +36,8 @@ user_expiry() {
 
 menu_adduser() {
   echo ""
-  read -rp "  Username: " u
-  [ -n "$u" ] || { echo "  kinansela."; return; }
+  read -rp "  Username (0 = bumalik): " u
+  [ "$u" = "0" ] || [ -z "$u" ] && { echo "  bumalik sa menu."; return; }
   read -rp "  Ilang araw (default 30): " d
   d="${d:-30}"
   read -rsp "  Password (blank = random): " p; echo ""
@@ -51,8 +51,8 @@ menu_deluser() {
   [ -z "$users" ] && { echo "  walang VPN users."; return; }
   echo "$users" | nl -ba | sed 's/^/  /'
   echo ""
-  read -rp "  Username na buburahin: " u
-  [ -n "$u" ] || { echo "  kinansela."; return; }
+  read -rp "  Username na buburahin (0 = bumalik): " u
+  [ "$u" = "0" ] || [ -z "$u" ] && { echo "  bumalik sa menu."; return; }
   id "$u" >/dev/null 2>&1 || { echo "  walang user na $u."; return; }
   read -rp "  Sigurado ka bang burahin si $u? (y/N): " c
   case "$c" in
@@ -159,8 +159,8 @@ while true; do
   read -rp "  Select (0-6): " c
   case "$c" in
     1) menu_adduser ;;
-    2) menu_deluser ;;
-    3) menu_listusers ;;
+    2) menu_listusers ;;
+    3) menu_deluser ;;
     4) menu_details ;;
     5) menu_status ;;
     6) menu_restart ;;
