@@ -142,7 +142,22 @@ menu_restart() {
   done
 }
 
-# ================= MENU LOOP =================
+menu_reboot() {
+  echo ""
+  echo "  BABALA: magre-reboot ang VPS — mawawala ang SSH connection mo."
+  echo "  Lahat ng services ay automatic na babalik pagka-boot."
+  read -rp "  Siguradong i-reboot? (y/N): " c
+  case "$c" in
+    y|Y)
+      echo "  Nire-reboot ang VPS ngayon..."
+      sleep 2
+      reboot
+      ;;
+    *) echo "  kinansela." ;;
+  esac
+}
+
+# ================= MENU LOOP ================
 while true; do
   echo ""
   echo "  ======================================="
@@ -154,9 +169,10 @@ while true; do
   echo "   4) VPN Details"
   echo "   5) Service Status"
   echo "   6) Restart Services"
+  echo "   7) Reboot VPS"
   echo "   0) Exit"
   echo "  ======================================="
-  read -rp "  Select (0-6): " c
+  read -rp "  Select (0-7): " c
   case "$c" in
     1) menu_adduser ;;
     2) menu_listusers ;;
@@ -164,6 +180,7 @@ while true; do
     4) menu_details ;;
     5) menu_status ;;
     6) menu_restart ;;
+    7) menu_reboot ;;
     0) echo "  Bye!"; exit 0 ;;
     *) echo "  invalid option." ;;
   esac
