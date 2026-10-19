@@ -75,7 +75,19 @@ apt-get install -y -qq --fix-broken 2>/dev/null || true
 apt-get upgrade -y -qq || warn "apt-get upgrade pumalya — tutuloy pa rin sa pag-install ng packages."
 apt-get install -y -qq curl wget git python3 ufw fail2ban nginx certbot python3-certbot-nginx \
   dropbear openssh-server dnsutils iptables-persistent netfilter-persistent \
-  || die "apt-get install pumalya pa rin — patakbuhin muna: sudo dpkg --configure -a && sudo apt-get install -y --fix-broken"
+  || {
+    warn "combined apt install pumalya — susubukan nang paisa-isa para hindi patayin ng isang package ang lahat."
+    PKGS_ESSENTIAL="curl wget git python3 ufw fail2ban nginx certbot python3-certbot-nginx dropbear openssh-server iptables-persistent"
+    PKGS_OPTIONAL="dnsutils netfilter-persistent"
+    FAILED=""
+    for p in $PKGS_ESSENTIAL; do
+      apt-get install -y -qq "$p" || FAILED="$FAILED $p"
+    done
+    for p in $PKGS_OPTIONAL; do
+      apt-get install -y -qq "$p" || warn "optional package '$p' hindi na-install — tutuloy pa rin."
+    done
+    [ -z "$FAILED" ] || die "Hindi na-install ang mga essential package:$FAILED."
+  }
 
 # =============================================================================
 log "Step 2/11: palayain ang port 53 (disable systemd-resolved stub)..."
