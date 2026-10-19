@@ -85,6 +85,29 @@ printf 'NO_START=0\nDROPBEAR_PORT=109\nDROPBEAR_EXTRA_ARGS="-p 143"\nDROPBEAR_BA
 svc enable ssh; svc restart ssh
 svc enable dropbear; svc restart dropbear
 
+# --- Optional: SSH password login (kapag may SSH_PASSWORD env var) ---
+# Hal: sudo SSH_PASSWORD='matibay-na-password' ./vpn-server.sh <domain> <ns-domain>
+if [ -n "${SSH_PASSWORD:-}" ]; then
+  SSH_USER="${SUDO_USER:-ubuntu}"
+  id "$SSH_USER" >/dev/null 2>&1 || SSH_USER="ubuntu"
+  case "$SSH_PASSWORD" in
+    *:* ) warn "Ang password ay hindi pwedeng may ':' — nilaktawan ang password setup."; SSH_PASSWORD="" ;;
+  esac
+  if [ -n "${SSH_PASSWORD:-}" ]; then
+    if echo "$SSH_USER:$SSH_PASSWORD" | chpasswd; then
+      log "Password na-set para sa user '$SSH_USER'."
+    else
+      warn "chpasswd pumalya para sa '$SSH_USER'."
+    fi
+    # sshd: first-obtained value wins — 00- drop-in para ma-override ang cloudimg default (PasswordAuthentication no)
+    printf 'PasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-jepongvpn-password.conf
+    svc restart ssh
+    log "SSH password login ENABLED (user: $SSH_USER). Gumamit ng malakas na password — aktibo ang fail2ban."
+  fi
+else
+  log "SSH password login: skipped (walang SSH_PASSWORD env var)."
+fi
+
 # =============================================================================
 log "Step 4/11: OpenVPN (UDP 1194)..."
 if [ ! -f /etc/openvpn/server.conf ]; then
@@ -417,6 +440,11 @@ echo ""
 echo "  [SSH]"
 echo "    OpenSSH.....: port 22"
 echo "    Dropbear....: port 109, 143"
+if [ -n "${SSH_PASSWORD:-}" ]; then
+echo "    Password....: ENABLED (user: ${SUDO_USER:-ubuntu})"
+else
+echo "    Password....: key-only (maglagay ng SSH_PASSWORD env var para i-enable)"
+fi
 echo ""
 echo "  [OpenVPN]"
 echo "    UDP 1194, client file: /root/jepong.ovpn"

@@ -14,6 +14,17 @@ Halimbawa:
 sudo ./vpn-server.sh vpn.example.com t.vpn.example.com
 ```
 
+## SSH password login (optional)
+
+Gusto mo ng user/pass sa Termius imbes na SSH key? Maglagay ng `SSH_PASSWORD`:
+
+```bash
+sudo SSH_PASSWORD='matibay-na-password-mo' ./vpn-server.sh vpn.example.com t.vpn.example.com
+```
+
+Bawal ang `:` sa password. Aktibo ang fail2ban kaya protektado laban sa brute force —
+pero gumamit pa rin ng malakas na password.
+
 ## Ano ang naka-install
 
 | Service | Port |
