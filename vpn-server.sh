@@ -94,6 +94,8 @@ log "Step 2/11: palayain ang port 53 (disable systemd-resolved stub)..."
 systemctl disable --now systemd-resolved 2>/dev/null || true
 rm -f /etc/resolv.conf
 printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
+# Ayusin ang sudo "unable to resolve host" warning (nawala ang cloud DNS sa resolv.conf)
+grep -q "$(hostname)" /etc/hosts 2>/dev/null || echo "127.0.0.1 $(hostname)" >> /etc/hosts
 
 # =============================================================================
 log "Step 3/11: SSH — OpenSSH (22) + Dropbear (109, 143)..."
@@ -454,6 +456,12 @@ sysctl -p >/dev/null 2>&1 || sysctl --system >/dev/null 2>&1 || true
 
 # =============================================================================
 log "Step 11/11: UFW firewall..."
+if ! command -v ufw >/dev/null 2>&1; then
+  warn "ufw ay wala — sinusubukang i-install."
+  apt-get update -qq 2>/dev/null; apt-get install -y -qq ufw 2>/dev/null \
+    && log "ufw na-install." \
+    || warn "ufw hindi ma-install — walang firewall."
+fi
 if ufw --force reset >/dev/null 2>&1; then
   ufw default deny incoming >/dev/null
   ufw default allow outgoing >/dev/null
