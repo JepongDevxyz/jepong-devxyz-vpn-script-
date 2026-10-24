@@ -97,6 +97,21 @@ apt-get install -y -qq curl wget git python3 ufw fail2ban nginx certbot python3-
     [ -z "$FAILED" ] || die "Hindi na-install ang mga essential package:$FAILED."
   }
 
+# Swap para sa maliliit na VPS (<2GB RAM, walang swap): kailangan ng Go builds (dnstt Step 8, udp_custom Step 9).
+# Kung walang swap, ang Go compiler ay papatayin ng OOM killer sa 512MB box (proven 2026-10-24 sa Ubuntu).
+if [ ! -f /swapfile ]; then
+  SWAP_TOTAL="$(free -m 2>/dev/null | awk '/^Swap:/ {print $2}')"
+  MEM_TOTAL="$(free -m 2>/dev/null | awk '/^Mem:/ {print $2}')"
+  if [ "${SWAP_TOTAL:-1}" = "0" ] && [ -n "$MEM_TOTAL" ] && [ "$MEM_TOTAL" -lt 2048 ]; then
+    log "Maliit na RAM (${MEM_TOTAL}MB) at walang swap — gumagawa ng 1GB swapfile para hindi ma-OOM ang Go builds..."
+    fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none 2>/dev/null || warn "swapfile hindi magawa."
+    chmod 600 /swapfile 2>/dev/null || true
+    mkswap /swapfile >/dev/null 2>&1 || true
+    swapon /swapfile 2>/dev/null || warn "swapon pumalya."
+    grep -q "^/swapfile" /etc/fstab 2>/dev/null || echo "/swapfile none swap sw 0 0" >> /etc/fstab
+  fi
+fi
+
 # =============================================================================
 log "Step 2/18: palayain ang port 53 (disable systemd-resolved stub)..."
 systemctl disable --now systemd-resolved 2>/dev/null || true
@@ -737,6 +752,14 @@ fi
 # =============================================================================
 log "Step 15/18: L2TP/IPSec (strongSwan + xl2tpd)..."
 apt-get install -y -qq strongswan strongswan-pki xl2tpd 2>/dev/null || warn "strongswan/xl2tpd hindi ma-install."
+# trixie/strongSwan 6.0: ang `ipsec` ay nasa HIWALAY na strongswan-starter package (wala sa base strongswan).
+# Subukan ito nang hiwalay — harmless kung walang ganyang package (bundled na ang starter sa luma).
+apt-get install -y -qq strongswan-starter 2>/dev/null || true
+# Re-detect SS_SVC PAGKATAPOS mag-install (ang starter unit ay lumilitaw lang kapag na-install na ang package;
+# ang detection sa itaas ay masyadong maaga para sa fresh install kaya nananatili sa "strongswan" at pumapalya ang restart).
+if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
+  SS_SVC="strongswan-starter"
+fi
 L2TP_PSK="$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
 L2TP_USER="jepong"
 L2TP_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"

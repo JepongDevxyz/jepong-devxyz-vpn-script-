@@ -404,6 +404,13 @@ fi
 # =============================================================================
 log "L2TP/IPSec (strongSwan + xl2tpd)..."
 apt-get install -y -qq strongswan strongswan-pki xl2tpd 2>/dev/null || warn "strongswan/xl2tpd hindi ma-install."
+# trixie/strongSwan 6.0: ang `ipsec` ay nasa HIWALAY na strongswan-starter package (wala sa base strongswan).
+# Subukan ito nang hiwalay — harmless kung walang ganyang package (bundled na ang starter sa luma).
+apt-get install -y -qq strongswan-starter 2>/dev/null || true
+# Re-detect SS_SVC PAGKATAPOS mag-install (ang starter unit ay lumilitaw lang kapag na-install na ang package).
+if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
+  SS_SVC="strongswan-starter"
+fi
 if command -v ipsec >/dev/null 2>&1 && command -v xl2tpd >/dev/null 2>&1; then
   if [ -f /etc/jepongvpn/l2tp-creds.txt ]; then
     log "L2TP/IPSec ay nandiyan na — nilaktawan."
