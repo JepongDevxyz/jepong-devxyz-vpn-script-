@@ -63,7 +63,7 @@ svc() {
 }
 
 # =============================================================================
-log "Step 1/11: system update + essentials..."
+log "Step 1/18: system update + essentials..."
 # Preseed iptables-persistent BAGO i-install para hindi mag-prompt
 echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections
 echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | debconf-set-selections
@@ -90,7 +90,7 @@ apt-get install -y -qq curl wget git python3 ufw fail2ban nginx certbot python3-
   }
 
 # =============================================================================
-log "Step 2/11: palayain ang port 53 (disable systemd-resolved stub)..."
+log "Step 2/18: palayain ang port 53 (disable systemd-resolved stub)..."
 systemctl disable --now systemd-resolved 2>/dev/null || true
 rm -f /etc/resolv.conf
 printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
@@ -98,14 +98,14 @@ printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
 grep -q "$(hostname)" /etc/hosts 2>/dev/null || echo "127.0.0.1 $(hostname)" >> /etc/hosts
 
 # =============================================================================
-log "Step 3/11: SSH — OpenSSH (22) + Dropbear (109, 143)..."
+log "Step 3/18: SSH — OpenSSH (22) + Dropbear (109, 143)..."
 cp -n /etc/default/dropbear /etc/default/dropbear.bak 2>/dev/null || true
 printf 'NO_START=0\nDROPBEAR_PORT=109\nDROPBEAR_EXTRA_ARGS="-p 143"\nDROPBEAR_BANNER=""\nDROPBEAR_RSAKEY="/etc/dropbear/dropbear_rsa_host_key"\nDROPBEAR_DSSKEY="/etc/dropbear/dropbear_dss_host_key"\nDROPBEAR_ECDSAKEY="/etc/dropbear/dropbear_ecdsa_host_key"\nDROPBEAR_RECEIVE_WINDOW=65536\n' > /etc/default/dropbear
 svc enable ssh; svc restart ssh
 svc enable dropbear; svc restart dropbear
 
 # --- SSH password login (default: JepongDevxyz; o maglagay ng SSH_PASSWORD env var) ---
-# Hal: sudo SSH_PASSWORD='matibay-na-password' ./vpn-server-ubuntu.sh <domain> <ns-domain>
+# Hal: sudo SSH_PASSWORD='matibay-na-password' ./vpn-server-debian.sh <domain> <ns-domain>
 SSH_PASSWORD_IS_DEFAULT=0
 if [ -z "${SSH_PASSWORD:-}" ]; then
   SSH_PASSWORD="JepongDevxyz"
@@ -134,7 +134,7 @@ if [ -n "$SSH_PASSWORD" ]; then
 fi
 
 # =============================================================================
-log "Step 4/11: OpenVPN (UDP 1194)..."
+log "Step 4/18: OpenVPN (UDP 1194)..."
 if [ ! -f /etc/openvpn/server.conf ]; then
   curl -fsSL -o /root/openvpn-install.sh \
     https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
@@ -148,7 +148,7 @@ else
 fi
 
 # =============================================================================
-log "Step 5/11: Xray (VLESS/VMess/Trojan over WebSocket)..."
+log "Step 5/18: Xray (VLESS/VMess/Trojan over WebSocket)..."
 if ! command -v xray >/dev/null 2>&1; then
   bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 fi
@@ -167,12 +167,32 @@ def ws_inbound(port, protocol, clients, path):
         "settings": settings,
         "streamSettings": {"network": "ws", "wsSettings": {"path": path}},
     }
+def grpc_inbound(port, protocol, clients, service):
+    settings = {"clients": clients}
+    if protocol == "vless":
+        settings["decryption"] = "none"
+    return {
+        "port": port, "listen": "127.0.0.1", "protocol": protocol,
+        "settings": settings,
+        "streamSettings": {"network": "grpc", "grpcSettings": {"serviceName": service}},
+    }
+def xhttp_inbound(port, protocol, clients, path):
+    settings = {"clients": clients}
+    if protocol == "vless":
+        settings["decryption"] = "none"
+    return {
+        "port": port, "listen": "127.0.0.1", "protocol": protocol,
+        "settings": settings,
+        "streamSettings": {"network": "xhttp", "xhttpSettings": {"path": path}},
+    }
 config = {
     "log": {"loglevel": "warning"},
     "inbounds": [
         ws_inbound(10001, "vless", [{"id": uuid_vless}], "/vless"),
         ws_inbound(10002, "vmess", [{"id": uuid_vmess, "alterId": 0}], "/vmess"),
         ws_inbound(10003, "trojan", [{"password": trojan_pass}], "/trojan"),
+        grpc_inbound(10004, "vless", [{"id": uuid_vless}], "grpc"),
+        xhttp_inbound(10005, "vless", [{"id": uuid_vless}], "/xhttp"),
     ],
     "outbounds": [{"protocol": "freedom"}],
 }
@@ -198,7 +218,7 @@ printf '%s\n' "$NSDOMAIN" > /etc/jepongvpn/nsdomain.txt
 chmod 600 /etc/jepongvpn/domain.txt /etc/jepongvpn/nsdomain.txt
 
 # =============================================================================
-log "Step 6/11: nginx + Let's Encrypt SSL para sa $DOMAIN..."
+log "Step 6/18: nginx + Let's Encrypt SSL para sa $DOMAIN..."
 cat > /etc/nginx/sites-available/vpn <<'NGEOF'
 server {
     listen 80;
@@ -248,6 +268,16 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
     }
+    location /grpc {
+        grpc_pass grpc://127.0.0.1:10004;
+    }
+    location = /xhttp {
+        proxy_pass http://127.0.0.1:10005;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
     location / { return 404; }
 }
 NGEOF
@@ -256,7 +286,7 @@ nginx -t || die "nginx config may mali."
 svc reload nginx || svc restart nginx
 
 # =============================================================================
-log "Step 7/11: WebSocket SSH proxy (port 8080)..."
+log "Step 7/18: WebSocket SSH proxy (port 8080)..."
 cat > /usr/local/bin/ssh-ws.py <<'PYEOF'
 #!/usr/bin/env python3
 """SSH-over-WebSocket proxy: HTTP Upgrade -> raw TCP bridge sa SSH (127.0.0.1:22)."""
@@ -343,7 +373,7 @@ if [ "$HAS_SYSTEMD" -eq 1 ]; then systemctl daemon-reload; fi
 svc enable ssh-ws; svc start ssh-ws
 
 # =============================================================================
-log "Step 8/11: SlowDNS / dnstt (UDP 53)..."
+log "Step 8/18: SlowDNS / dnstt (UDP 53)..."
 if ! command -v /usr/local/bin/dnstt-server >/dev/null 2>&1 && [ ! -x /usr/local/bin/dnstt-server ]; then
   # Go (official tarball, pinakabagong stable)
   GO_FILE="$(curl -fsSL https://go.dev/dl/?mode=json | python3 -c "
@@ -386,7 +416,7 @@ svc enable dnstt; svc restart dnstt
 DNSTT_PUB="$(cat /etc/dnstt/server.pub)"
 
 # =============================================================================
-log "Step 9/11: UDP Custom server (udp_custom)..."
+log "Step 9/18: UDP Custom server (udp_custom)..."
 # I-build mula sa source — walang GitHub releases ang udp_custom repo (404 sa install.sh).
 UDP_OK=0
 if [ ! -x /usr/local/bin/udp_custom ]; then
@@ -454,14 +484,318 @@ chmod 600 /etc/jepongvpn/udp-psk.txt
 fi # UDP_OK
 
 # =============================================================================
-log "Step 10/11: BBR congestion control..."
+log "Step 10/18: BBR congestion control..."
 if ! grep -q 'net.ipv4.tcp_congestion_control=bbr' /etc/sysctl.conf 2>/dev/null; then
   printf '\nnet.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr\n' >> /etc/sysctl.conf
 fi
 sysctl -p >/dev/null 2>&1 || sysctl --system >/dev/null 2>&1 || true
 
 # =============================================================================
-log "Step 11/11: UFW firewall..."
+log "Step 11/18: WireGuard (UDP 51820)..."
+apt-get install -y -qq wireguard 2>/dev/null || warn "wireguard package hindi ma-install."
+if command -v wg >/dev/null 2>&1; then
+  mkdir -p /etc/wireguard
+  if [ ! -f /etc/wireguard/server.key ]; then
+    wg genkey | tee /etc/wireguard/server.key | wg pubkey > /etc/wireguard/server.pub
+    chmod 600 /etc/wireguard/server.key
+  fi
+  WG_PRIV="$(cat /etc/wireguard/server.key)"
+  WG_PUB="$(cat /etc/wireguard/server.pub)"
+  if [ ! -f /etc/wireguard/client.key ]; then
+    wg genkey | tee /etc/wireguard/client.key | wg pubkey > /etc/wireguard/client.pub
+    chmod 600 /etc/wireguard/client.key
+  fi
+  WG_CLI_PRIV="$(cat /etc/wireguard/client.key)"
+  WG_CLI_PUB="$(cat /etc/wireguard/client.pub)"
+  grep -q 'net.ipv4.ip_forward=1' /etc/sysctl.conf 2>/dev/null || echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+  sysctl -p >/dev/null 2>&1 || true
+  cat > /etc/wireguard/wg0.conf <<WGEOF
+[Interface]
+PrivateKey = $WG_PRIV
+Address = 10.7.0.1/24
+ListenPort = 51820
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.7.0.0/24 -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.7.0.0/24 -j MASQUERADE
+[Peer]
+PublicKey = $WG_CLI_PUB
+AllowedIPs = 10.7.0.2/32
+WGEOF
+  chmod 600 /etc/wireguard/wg0.conf
+  cat > /etc/jepongvpn/wireguard-client.conf <<WGEOF
+[Interface]
+PrivateKey = $WG_CLI_PRIV
+Address = 10.7.0.2/24
+DNS = 1.1.1.1
+[Peer]
+PublicKey = $WG_PUB
+Endpoint = $DOMAIN:51820
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+WGEOF
+  chmod 600 /etc/jepongvpn/wireguard-client.conf
+  svc enable wg-quick@wg0; svc start wg-quick@wg0
+  log "WireGuard OK (51820/udp)."
+else
+  warn "WireGuard hindi na-install (walang wg binary)."
+fi
+
+# =============================================================================
+log "Step 12/18: Shadowsocks (8388)..."
+apt-get install -y -qq shadowsocks-libev 2>/dev/null || warn "shadowsocks-libev hindi ma-install."
+SS_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
+if command -v ss-server >/dev/null 2>&1; then
+  mkdir -p /etc/shadowsocks-libev
+  cat > /etc/shadowsocks-libev/config.json <<SSEOF
+{
+  "server": "0.0.0.0",
+  "server_port": 8388,
+  "password": "$SS_PASS",
+  "method": "aes-256-gcm",
+  "mode": "tcp_and_udp"
+}
+SSEOF
+  printf '%s\n' "$SS_PASS" > /etc/jepongvpn/shadowsocks-pass.txt
+  chmod 600 /etc/jepongvpn/shadowsocks-pass.txt
+  svc enable shadowsocks-libev; svc restart shadowsocks-libev
+  log "Shadowsocks OK (8388)."
+else
+  warn "Shadowsocks hindi na-install."
+fi
+
+# =============================================================================
+log "Step 13/18: Hysteria2 (UDP 4443)..."
+HY_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
+if [ ! -x /usr/local/bin/hysteria ]; then
+  HY_URL="$(curl -fsSL https://api.github.com/repos/apernet/hysteria/releases/latest 2>/dev/null | grep -o 'https://[^"]*hysteria-linux-amd64' | head -1)"
+  if [ -n "$HY_URL" ]; then
+    curl -fsSL -o /usr/local/bin/hysteria "$HY_URL" && chmod +x /usr/local/bin/hysteria \
+      && log "hysteria binary na-download." \
+      || warn "hysteria download pumalya."
+  else
+    warn "hysteria release URL hindi nahanap."
+  fi
+fi
+if [ -x /usr/local/bin/hysteria ]; then
+  mkdir -p /etc/hysteria
+  cat > /etc/hysteria/config.yaml <<HYEOF
+listen: :4443
+tls:
+  cert: /etc/letsencrypt/live/$DOMAIN/fullchain.pem
+  key: /etc/letsencrypt/live/$DOMAIN/privkey.pem
+auth:
+  type: password
+  password: $HY_PASS
+masquerade:
+  type: proxy
+  proxy:
+    url: https://$DOMAIN
+    rewriteHost: true
+HYEOF
+  cat > /etc/systemd/system/hysteria.service <<HYSVEOF
+[Unit]
+Description=Hysteria2 server
+After=network.target
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target
+HYSVEOF
+  if [ "$HAS_SYSTEMD" -eq 1 ]; then systemctl daemon-reload; fi
+  printf '%s\n' "$HY_PASS" > /etc/jepongvpn/hysteria-pass.txt
+  chmod 600 /etc/jepongvpn/hysteria-pass.txt
+  svc enable hysteria; svc restart hysteria
+  log "Hysteria2 OK (4443/udp)."
+else
+  warn "Hysteria2 hindi na-install."
+fi
+
+# =============================================================================
+log "Step 14/18: OpenVPN TCP (1194/tcp, reuse PKI)..."
+if [ -f /etc/openvpn/server.conf ]; then
+  sed -e 's/^proto udp.*/proto tcp/' \
+      -e 's/^port 1194.*/port 1194/' \
+      -e 's|^status .*|status /var/log/openvpn-tcp-status.log|' \
+      /etc/openvpn/server.conf > /etc/openvpn/server-tcp.conf
+  sed -i 's/^server 10\.8\.0\.0.*/server 10.9.0.0 255.255.255.0/' /etc/openvpn/server-tcp.conf
+  sed -i '/^explicit-exit-notify/d' /etc/openvpn/server-tcp.conf
+  svc enable openvpn@server-tcp; svc start openvpn@server-tcp
+  log "OpenVPN TCP OK (1194/tcp)."
+else
+  warn "OpenVPN UDP wala pa — nilaktawan ang TCP instance."
+fi
+
+# =============================================================================
+log "Step 15/18: L2TP/IPSec (strongSwan + xl2tpd)..."
+apt-get install -y -qq strongswan xl2tpd 2>/dev/null || warn "strongswan/xl2tpd hindi ma-install."
+L2TP_PSK="$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
+L2TP_USER="jepong"
+L2TP_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+if command -v ipsec >/dev/null 2>&1 && command -v xl2tpd >/dev/null 2>&1; then
+  cat > /etc/ipsec.conf <<IPEOF
+config setup
+    charondebug="ike 1, knl 1, cfg 0"
+    uniqueids=no
+conn l2tp-psk
+    auto=add
+    authby=secret
+    pfs=no
+    ike=aes256-sha1-modp1024!
+    esp=aes256-sha1!
+    type=transport
+    left=%defaultroute
+    leftprotoport=17/1701
+    right=%any
+    rightprotoport=17/%any
+    dpdaction=clear
+    dpddelay=30s
+IPEOF
+  printf '%%any : PSK "%s"\n' "$L2TP_PSK" > /etc/ipsec.secrets
+  chmod 600 /etc/ipsec.secrets
+  cat > /etc/xl2tpd/xl2tpd.conf <<XLEOF
+[global]
+port = 1701
+[lns default]
+ip range = 10.10.0.10-10.10.0.100
+local ip = 10.10.0.1
+require chap = yes
+refuse pap = yes
+require authentication = yes
+name = JepongVPN
+ppp debug = no
+pppoptfile = /etc/ppp/options.xl2tpd
+length bit = yes
+XLEOF
+  cat > /etc/ppp/options.xl2tpd <<PPEOF
+ipcp-accept-local
+ipcp-accept-remote
+ms-dns 1.1.1.1
+ms-dns 8.8.8.8
+noccp
+auth
+idle 1800
+mtu 1410
+mru 1410
+nodefaultroute
+debug
+proxyarp
+connect-delay 5000
+PPEOF
+  printf '%s * %s *\n' "$L2TP_USER" "$L2TP_PASS" > /etc/ppp/chap-secrets
+  chmod 600 /etc/ppp/chap-secrets
+  grep -q 'net.ipv4.ip_forward=1' /etc/sysctl.conf 2>/dev/null || echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+  sysctl -p >/dev/null 2>&1 || true
+  iptables -t nat -C POSTROUTING -s 10.10.0.0/24 -j MASQUERADE 2>/dev/null \
+    || iptables -t nat -A POSTROUTING -s 10.10.0.0/24 -j MASQUERADE
+  netfilter-persistent save >/dev/null 2>&1 || true
+  printf '%s\n%s\n%s\n' "$L2TP_PSK" "$L2TP_USER" "$L2TP_PASS" > /etc/jepongvpn/l2tp-creds.txt
+  chmod 600 /etc/jepongvpn/l2tp-creds.txt
+  svc enable strongswan; svc restart strongswan
+  svc enable xl2tpd; svc restart xl2tpd
+  log "L2TP/IPSec OK (500,4500,1701/udp)."
+else
+  warn "L2TP/IPSec hindi na-install."
+fi
+
+# =============================================================================
+log "Step 16/18: IKEv2 (strongSwan EAP)..."
+IKE_USER="jepong"
+IKE_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+if command -v ipsec >/dev/null 2>&1 && command -v pki >/dev/null 2>&1; then
+  mkdir -p /etc/ipsec.d/cacerts /etc/ipsec.d/certs /etc/ipsec.d/private
+  if [ ! -f /etc/ipsec.d/cacerts/ca-cert.pem ]; then
+    pki --gen --type rsa --size 4096 --outform pem > /etc/ipsec.d/private/ca-key.pem
+    pki --self --ca --lifetime 3650 --in /etc/ipsec.d/private/ca-key.pem \
+      --type rsa --dn "CN=JepongVPN CA" --outform pem > /etc/ipsec.d/cacerts/ca-cert.pem
+    pki --gen --type rsa --size 4096 --outform pem > /etc/ipsec.d/private/server-key.pem
+    pki --pub --in /etc/ipsec.d/private/server-key.pem --type rsa \
+      | pki --issue --lifetime 3650 --cacert /etc/ipsec.d/cacerts/ca-cert.pem \
+        --cakey /etc/ipsec.d/private/ca-key.pem --dn "CN=$DOMAIN" \
+        --san "$DOMAIN" --flag serverAuth --flag ikeIntermediate \
+        --outform pem > /etc/ipsec.d/certs/server-cert.pem
+  fi
+  cat >> /etc/ipsec.conf <<IKEEOF
+
+conn ikev2-eap
+    auto=add
+    compress=no
+    type=tunnel
+    keyexchange=ikev2
+    fragmentation=yes
+    forceencaps=yes
+    dpdaction=clear
+    dpddelay=300s
+    rekey=no
+    left=%any
+    leftid=@$DOMAIN
+    leftcert=server-cert.pem
+    leftsendcert=always
+    leftsubnet=0.0.0.0/0
+    right=%any
+    rightid=%any
+    rightauth=eap-mschapv2
+    rightsourceip=10.11.0.0/24
+    rightdns=1.1.1.1,8.8.8.8
+    rightsendcert=never
+    eap_identity=%identity
+IKEEOF
+  printf '%s : EAP "%s"\n' "$IKE_USER" "$IKE_PASS" >> /etc/ipsec.secrets
+  printf '%s\n%s\n' "$IKE_USER" "$IKE_PASS" > /etc/jepongvpn/ikev2-creds.txt
+  chmod 600 /etc/jepongvpn/ikev2-creds.txt
+  iptables -t nat -C POSTROUTING -s 10.11.0.0/24 -j MASQUERADE 2>/dev/null \
+    || iptables -t nat -A POSTROUTING -s 10.11.0.0/24 -j MASQUERADE
+  netfilter-persistent save >/dev/null 2>&1 || true
+  svc restart strongswan
+  log "IKEv2 OK (500,4500/udp)."
+else
+  warn "IKEv2 hindi na-install."
+fi
+
+# =============================================================================
+log "Step 17/18: PPTP (1723/tcp)..."
+apt-get install -y -qq pptpd 2>/dev/null || warn "pptpd hindi ma-install."
+PPTP_USER="jepong"
+PPTP_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+if command -v pptpd >/dev/null 2>&1; then
+  cat > /etc/pptpd.conf <<PPEOF2
+option /etc/ppp/pptpd-options
+logwtmp
+localip 10.12.0.1
+remoteip 10.12.0.10-100
+PPEOF2
+  cat > /etc/ppp/pptpd-options <<PPOOF
+name pptpd
+refuse-pap
+refuse-chap
+refuse-mschap
+require-mschap-v2
+require-mppe-128
+ms-dns 1.1.1.1
+ms-dns 8.8.8.8
+proxyarp
+nodefaultroute
+lock
+nobsdcomp
+novj
+novjccomp
+nologfd
+PPOOF
+  printf '%s pptpd %s *\n' "$PPTP_USER" "$PPTP_PASS" >> /etc/ppp/chap-secrets
+  printf '%s\n%s\n' "$PPTP_USER" "$PPTP_PASS" > /etc/jepongvpn/pptp-creds.txt
+  chmod 600 /etc/jepongvpn/pptp-creds.txt
+  iptables -t nat -C POSTROUTING -s 10.12.0.0/24 -j MASQUERADE 2>/dev/null \
+    || iptables -t nat -A POSTROUTING -s 10.12.0.0/24 -j MASQUERADE
+  netfilter-persistent save >/dev/null 2>&1 || true
+  svc enable pptpd; svc restart pptpd
+  log "PPTP OK (1723/tcp)."
+else
+  warn "PPTP hindi na-install."
+fi
+
+# =============================================================================
+log "Step 18/18: UFW firewall..."
 if ! command -v ufw >/dev/null 2>&1; then
   warn "ufw ay wala — sinusubukang i-install."
   apt-get update -qq 2>/dev/null; apt-get install -y -qq ufw 2>/dev/null \
@@ -481,6 +815,15 @@ if ufw --force reset >/dev/null 2>&1; then
   ufw allow 53/udp >/dev/null
   ufw allow 36712/udp >/dev/null
   ufw allow 25000:26000/udp >/dev/null
+  ufw allow 51820/udp >/dev/null
+  ufw allow 8388/tcp >/dev/null
+  ufw allow 8388/udp >/dev/null
+  ufw allow 4443/udp >/dev/null
+  ufw allow 1194/tcp >/dev/null
+  ufw allow 500/udp >/dev/null
+  ufw allow 4500/udp >/dev/null
+  ufw allow 1701/udp >/dev/null
+  ufw allow 1723/tcp >/dev/null
   if ufw --force enable; then log "UFW active."; else warn "UFW enable pumalya."; fi
 else
   warn "UFW hindi gumana dito."
@@ -526,6 +869,7 @@ fi
 echo ""
 echo "  [OpenVPN]"
 echo "    UDP 1194, client file: /root/jepong.ovpn"
+echo "    TCP 1194 (server-tcp.conf, parehong PKI)"
 echo ""
 echo "  [Xray]  (TLS, port 443)"
 echo "    VLESS UUID..: $UUID_VLESS"
@@ -544,6 +888,59 @@ echo ""
 echo "  [SlowDNS]"
 echo "    NS domain...: $NSDOMAIN (UDP 53)"
 echo "    Public key..: $DNSTT_PUB"
+echo ""
+echo "  [WireGuard]"
+if [ -f /etc/jepongvpn/wireguard-client.conf ]; then
+echo "    UDP 51820, client config: /etc/jepongvpn/wireguard-client.conf"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [Shadowsocks]"
+if [ -f /etc/jepongvpn/shadowsocks-pass.txt ]; then
+echo "    Port 8388, method aes-256-gcm, pass: $(cat /etc/jepongvpn/shadowsocks-pass.txt)"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [Hysteria2]"
+if [ -f /etc/jepongvpn/hysteria-pass.txt ]; then
+echo "    UDP 4443, pass: $(cat /etc/jepongvpn/hysteria-pass.txt)"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [OpenVPN TCP]"
+if [ -f /etc/openvpn/server-tcp.conf ]; then
+echo "    TCP 1194 (parehong CA/certs ng UDP)"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [L2TP/IPSec]"
+if [ -f /etc/jepongvpn/l2tp-creds.txt ]; then
+echo "    PSK + user/pass nasa /etc/jepongvpn/l2tp-creds.txt (500,4500,1701/udp)"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [IKEv2]"
+if [ -f /etc/jepongvpn/ikev2-creds.txt ]; then
+echo "    EAP user/pass nasa /etc/jepongvpn/ikev2-creds.txt (500,4500/udp)"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [PPTP]"
+if [ -f /etc/jepongvpn/pptp-creds.txt ]; then
+echo "    TCP 1723, user/pass nasa /etc/jepongvpn/pptp-creds.txt"
+else
+echo "    HINDI NA-INSTALL"
+fi
+echo ""
+echo "  [Xray Extra Transports]"
+echo "    VLESS gRPC: $DOMAIN:443 (serviceName grpc)"
+echo "    VLESS XHTTP: $DOMAIN:443 (path /xhttp)"
 echo ""
 echo "  [WebSocket SSH]"
 echo "    ws://$DOMAIN:8080  ->  SSH 127.0.0.1:22"
