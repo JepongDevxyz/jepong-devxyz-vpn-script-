@@ -755,6 +755,8 @@ apt-get install -y -qq strongswan strongswan-pki xl2tpd 2>/dev/null || warn "str
 # trixie/strongSwan 6.0: ang `ipsec` ay nasa HIWALAY na strongswan-starter package (wala sa base strongswan).
 # Subukan ito nang hiwalay — harmless kung walang ganyang package (bundled na ang starter sa luma).
 apt-get install -y -qq strongswan-starter 2>/dev/null || true
+# daemon-reload BAGO ang re-detect (proven 2026-10-25 Ubuntu-2 + Debian): bagong install ang starter unit, hindi pa ito nakikita ng list-unit-files hangga't hindi nagre-reload.
+systemctl daemon-reload 2>/dev/null || true
 # Re-detect SS_SVC PAGKATAPOS mag-install (ang starter unit ay lumilitaw lang kapag na-install na ang package;
 # ang detection sa itaas ay masyadong maaga para sa fresh install kaya nananatili sa "strongswan" at pumapalya ang restart).
 if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
