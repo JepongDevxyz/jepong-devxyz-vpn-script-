@@ -130,7 +130,7 @@ menu_details() {
     echo "  [Hysteria2 — UDP 4443]"
     echo "  Pass: $(cat /etc/jepongvpn/hysteria-pass.txt)"
   }
-  [ -f /etc/openvpn/server-tcp.conf ] && {
+  { [ -f /etc/openvpn/server/server-tcp.conf ] || [ -f /etc/openvpn/server-tcp.conf ]; } && {
     echo ""
     echo "  [OpenVPN TCP — 1194/tcp]"
     echo "  Parehong CA/certs ng UDP instance"

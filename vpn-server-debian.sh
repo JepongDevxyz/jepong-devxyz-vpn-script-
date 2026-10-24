@@ -614,22 +614,36 @@ fi
 
 # =============================================================================
 log "Step 14/18: OpenVPN TCP (1194/tcp, reuse PKI)..."
-if [ -f /etc/openvpn/server.conf ]; then
+OVPN_CONF=""
+OVPN_DIR=""
+OVPN_SVC=""
+if [ -f /etc/openvpn/server/server-tcp.conf ] || [ -f /etc/openvpn/server-tcp.conf ]; then
+  log "OpenVPN TCP ay nandiyan na — nilaktawan."
+elif [ -f /etc/openvpn/server/server.conf ]; then
+  OVPN_CONF="/etc/openvpn/server/server.conf"
+  OVPN_DIR="/etc/openvpn/server"
+  OVPN_SVC="openvpn-server@server-tcp"
+elif [ -f /etc/openvpn/server.conf ]; then
+  OVPN_CONF="/etc/openvpn/server.conf"
+  OVPN_DIR="/etc/openvpn"
+  OVPN_SVC="openvpn@server-tcp"
+fi
+if [ -n "$OVPN_CONF" ]; then
   sed -e 's/^proto udp.*/proto tcp/' \
       -e 's/^port 1194.*/port 1194/' \
       -e 's|^status .*|status /var/log/openvpn-tcp-status.log|' \
-      /etc/openvpn/server.conf > /etc/openvpn/server-tcp.conf
-  sed -i 's/^server 10\.8\.0\.0.*/server 10.9.0.0 255.255.255.0/' /etc/openvpn/server-tcp.conf
-  sed -i '/^explicit-exit-notify/d' /etc/openvpn/server-tcp.conf
-  svc enable openvpn@server-tcp; svc start openvpn@server-tcp
-  log "OpenVPN TCP OK (1194/tcp)."
-else
-  warn "OpenVPN UDP wala pa — nilaktawan ang TCP instance."
+      "$OVPN_CONF" > "$OVPN_DIR/server-tcp.conf"
+  sed -i -E 's/^server [0-9.]+ [0-9.]+/server 10.9.0.0 255.255.255.0/' "$OVPN_DIR/server-tcp.conf"
+  sed -i '/^explicit-exit-notify/d' "$OVPN_DIR/server-tcp.conf"
+  svc enable "$OVPN_SVC"; svc start "$OVPN_SVC"
+  log "OpenVPN TCP OK (1194/tcp, config: $OVPN_DIR/server-tcp.conf)."
+elif [ ! -f /etc/openvpn/server/server-tcp.conf ] && [ ! -f /etc/openvpn/server-tcp.conf ]; then
+  warn "OpenVPN UDP wala pa (walang server.conf) — nilaktawan ang TCP instance."
 fi
 
 # =============================================================================
 log "Step 15/18: L2TP/IPSec (strongSwan + xl2tpd)..."
-apt-get install -y -qq strongswan xl2tpd 2>/dev/null || warn "strongswan/xl2tpd hindi ma-install."
+apt-get install -y -qq strongswan strongswan-pki xl2tpd 2>/dev/null || warn "strongswan/xl2tpd hindi ma-install."
 L2TP_PSK="$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
 L2TP_USER="jepong"
 L2TP_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
@@ -703,18 +717,32 @@ fi
 log "Step 16/18: IKEv2 (strongSwan EAP)..."
 IKE_USER="jepong"
 IKE_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
-if command -v ipsec >/dev/null 2>&1 && command -v pki >/dev/null 2>&1; then
+if command -v ipsec >/dev/null 2>&1; then
   mkdir -p /etc/ipsec.d/cacerts /etc/ipsec.d/certs /etc/ipsec.d/private
   if [ ! -f /etc/ipsec.d/cacerts/ca-cert.pem ]; then
-    pki --gen --type rsa --size 4096 --outform pem > /etc/ipsec.d/private/ca-key.pem
-    pki --self --ca --lifetime 3650 --in /etc/ipsec.d/private/ca-key.pem \
-      --type rsa --dn "CN=JepongVPN CA" --outform pem > /etc/ipsec.d/cacerts/ca-cert.pem
-    pki --gen --type rsa --size 4096 --outform pem > /etc/ipsec.d/private/server-key.pem
-    pki --pub --in /etc/ipsec.d/private/server-key.pem --type rsa \
-      | pki --issue --lifetime 3650 --cacert /etc/ipsec.d/cacerts/ca-cert.pem \
-        --cakey /etc/ipsec.d/private/ca-key.pem --dn "CN=$DOMAIN" \
-        --san "$DOMAIN" --flag serverAuth --flag ikeIntermediate \
-        --outform pem > /etc/ipsec.d/certs/server-cert.pem
+    if command -v pki >/dev/null 2>&1; then
+      pki --gen --type rsa --size 4096 --outform pem > /etc/ipsec.d/private/ca-key.pem
+      pki --self --ca --lifetime 3650 --in /etc/ipsec.d/private/ca-key.pem \
+        --type rsa --dn "CN=JepongVPN CA" --outform pem > /etc/ipsec.d/cacerts/ca-cert.pem
+      pki --gen --type rsa --size 4096 --outform pem > /etc/ipsec.d/private/server-key.pem
+      pki --pub --in /etc/ipsec.d/private/server-key.pem --type rsa \
+        | pki --issue --lifetime 3650 --cacert /etc/ipsec.d/cacerts/ca-cert.pem \
+          --cakey /etc/ipsec.d/private/ca-key.pem --dn "CN=$DOMAIN" \
+          --san "$DOMAIN" --flag serverAuth --flag ikeIntermediate \
+          --outform pem > /etc/ipsec.d/certs/server-cert.pem
+    else
+      # openssl fallback (kapag walang pki tool)
+      openssl req -x509 -newkey rsa:4096 -keyout /etc/ipsec.d/private/ca-key.pem \
+        -out /etc/ipsec.d/cacerts/ca-cert.pem -days 3650 -nodes -subj "/CN=JepongVPN CA" 2>/dev/null
+      openssl req -newkey rsa:4096 -keyout /etc/ipsec.d/private/server-key.pem \
+        -out /tmp/jepong-server.csr -nodes -subj "/CN=$DOMAIN" 2>/dev/null
+      printf "[v3_req]\nsubjectAltName=DNS:%s\nextendedKeyUsage=serverAuth,1.3.6.1.5.5.8.2.2\n" "$DOMAIN" > /tmp/jepong-v3.ext
+      openssl x509 -req -in /tmp/jepong-server.csr -CA /etc/ipsec.d/cacerts/ca-cert.pem \
+        -CAkey /etc/ipsec.d/private/ca-key.pem -CAcreateserial \
+        -out /etc/ipsec.d/certs/server-cert.pem -days 3650 \
+        -extensions v3_req -extfile /tmp/jepong-v3.ext 2>/dev/null
+      rm -f /tmp/jepong-server.csr /tmp/jepong-v3.ext /etc/ipsec.d/cacerts/ca-cert.srl
+    fi
   fi
   cat >> /etc/ipsec.conf <<IKEEOF
 
@@ -791,7 +819,7 @@ PPOOF
   svc enable pptpd; svc restart pptpd
   log "PPTP OK (1723/tcp)."
 else
-  warn "PPTP hindi na-install."
+  warn "PPTP hindi na-install (Ubuntu 24.04: tinanggal ng Ubuntu ang pptpd package — hindi available via apt; sa Debian gumagana pa)."
 fi
 
 # =============================================================================
@@ -911,7 +939,7 @@ echo "    HINDI NA-INSTALL"
 fi
 echo ""
 echo "  [OpenVPN TCP]"
-if [ -f /etc/openvpn/server-tcp.conf ]; then
+if [ -f /etc/openvpn/server/server-tcp.conf ] || [ -f /etc/openvpn/server-tcp.conf ]; then
 echo "    TCP 1194 (parehong CA/certs ng UDP)"
 else
 echo "    HINDI NA-INSTALL"
