@@ -550,6 +550,38 @@ fi
 # =============================================================================
 log "PPTP (1723/tcp)..."
 apt-get install -y -qq pptpd 2>/dev/null || warn "pptpd hindi ma-install."
+# PPTP fallback para sa Ubuntu 24.04+ (tinanggal ang pptpd sa apt):
+# i-extract ang jammy package nang mano-mano (walang dpkg dependency check).
+# Ang binary ay kailangan lang ng libwrap + libc (parehong available sa noble);
+# ang ppp/bcrelay constraints ay packaging lang, hindi runtime needs.
+if ! command -v pptpd >/dev/null 2>&1; then
+  log "pptpd wala sa apt — sinusubukan ang Ubuntu jammy package (manual extract)..."
+  apt-get install -y -qq libwrap0 ppp 2>/dev/null || true
+  if curl -fsSL -o /tmp/pptpd.deb "http://archive.ubuntu.com/ubuntu/pool/main/p/pptpd/pptpd_1.4.0-12build2_amd64.deb" 2>/dev/null; then
+    mkdir -p /tmp/pptpd-x
+    if dpkg-deb -x /tmp/pptpd.deb /tmp/pptpd-x 2>/dev/null && [ -f /tmp/pptpd-x/usr/sbin/pptpd ]; then
+      cp /tmp/pptpd-x/usr/sbin/pptpd /usr/sbin/pptpd
+      chmod +x /usr/sbin/pptpd
+      cat > /etc/systemd/system/pptpd.service <<'PPTPSVEOF'
+[Unit]
+Description=PoPToP Point to Point Tunneling Server
+After=network.target
+[Service]
+EnvironmentFile=-/etc/default/pptpd
+ExecStart=/usr/sbin/pptpd --fg $DAEMON_OPTS
+[Install]
+WantedBy=multi-user.target
+PPTPSVEOF
+      if [ "$HAS_SYSTEMD" -eq 1 ]; then systemctl daemon-reload; fi
+      log "pptpd binary na-install mula sa jammy package."
+    else
+      warn "pptpd .deb extract pumalya."
+    fi
+    rm -rf /tmp/pptpd.deb /tmp/pptpd-x
+  else
+    warn "pptpd .deb download pumalya."
+  fi
+fi
 if command -v pptpd >/dev/null 2>&1; then
   if [ -f /etc/jepongvpn/pptp-creds.txt ]; then
     log "PPTP ay nandiyan na — nilaktawan."
@@ -589,7 +621,7 @@ PPOOF
     log "PPTP OK (1723/tcp)."
   fi
 else
-  warn "PPTP hindi na-install (Ubuntu 24.04: tinanggal ng Ubuntu ang pptpd package — hindi available via apt; sa Debian gumagana pa)."
+  warn "PPTP hindi na-install (apt at jammy fallback parehong pumalya)."
 fi
 
 # =============================================================================

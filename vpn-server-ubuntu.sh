@@ -142,17 +142,102 @@ if [ -n "$SSH_PASSWORD" ]; then
 fi
 
 # =============================================================================
-log "Step 4/18: OpenVPN (UDP 1194)..."
-if [ ! -f /etc/openvpn/server.conf ]; then
-  curl -fsSL -o /root/openvpn-install.sh \
-    https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
-  chmod +x /root/openvpn-install.sh
-  AUTO_INSTALL=y APPROVE_INSTALL=y APPROVE_IP=y IPV6_SUPPORT=n \
-    PORT_CHOICE=1 PROTOCOL_CHOICE=1 DNS=1 COMPRESSION_ENABLED=n CUSTOMIZE_ENC=n \
-    CLIENT=jepong PASS=1 ENDPOINT="$DOMAIN" bash /root/openvpn-install.sh
-  log "OpenVPN client file: /root/jepong.ovpn"
-else
+log "Step 4/18: OpenVPN (UDP 1194, manual setup)..."
+if [ -f /etc/openvpn/server/server.conf ] || [ -f /etc/openvpn/server.conf ]; then
   log "OpenVPN naka-install na — skip."
+else
+  apt-get install -y -qq openvpn easy-rsa 2>/dev/null || warn "openvpn/easy-rsa hindi ma-install."
+  if command -v openvpn >/dev/null 2>&1; then
+    mkdir -p /etc/openvpn/server /etc/openvpn/easy-rsa
+    if [ ! -f /etc/openvpn/server/ca.crt ]; then
+      if [ -d /usr/share/easy-rsa ]; then
+        cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/ 2>/dev/null || true
+      fi
+      if [ ! -f /etc/openvpn/easy-rsa/easyrsa ]; then
+        EASYRSA_TGZ="$(curl -fsSL https://api.github.com/repos/OpenVPN/easy-rsa/releases/latest 2>/dev/null | grep -o 'https://[^"]*EasyRSA-3[^"]*\.tgz' | head -1)"
+        if [ -n "$EASYRSA_TGZ" ]; then
+          curl -fsSL -o /tmp/easyrsa.tgz "$EASYRSA_TGZ" && tar -xzf /tmp/easyrsa.tgz -C /tmp \
+            && cp -r /tmp/EasyRSA-*/easyrsa3/* /etc/openvpn/easy-rsa/ 2>/dev/null \
+            && log "easy-rsa na-download." || warn "easy-rsa download pumalya."
+        fi
+      fi
+      if [ -f /etc/openvpn/easy-rsa/easyrsa ]; then
+        cd /etc/openvpn/easy-rsa || warn "hindi makapasok sa easy-rsa dir."
+        ./easyrsa init-pki >/dev/null 2>&1 || true
+        ./easyrsa --batch build-ca nopass >/dev/null 2>&1 || true
+        ./easyrsa --batch build-server-full server nopass >/dev/null 2>&1 || true
+        ./easyrsa --batch build-client-full jepong nopass >/dev/null 2>&1 || true
+        ./easyrsa --batch gen-dh >/dev/null 2>&1 || true
+        openvpn --genkey secret /etc/openvpn/server/ta.key 2>/dev/null || true
+        cp pki/ca.crt pki/issued/server.crt pki/private/server.key pki/dh.pem /etc/openvpn/server/ 2>/dev/null || true
+        cd / || true
+        log "OpenVPN PKI nalikha."
+      fi
+    fi
+    if [ -f /etc/openvpn/server/ca.crt ]; then
+      cat > /etc/openvpn/server/server.conf <<OVPN_EOF
+port 1194
+proto udp
+dev tun
+ca /etc/openvpn/server/ca.crt
+cert /etc/openvpn/server/server.crt
+key /etc/openvpn/server/server.key
+dh /etc/openvpn/server/dh.pem
+topology subnet
+server 10.8.0.0 255.255.255.0
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 1.1.1.1"
+push "dhcp-option DNS 8.8.8.8"
+keepalive 10 120
+cipher AES-256-GCM
+persist-key
+persist-tun
+status /var/log/openvpn-status.log
+verb 3
+explicit-exit-notify 1
+tls-auth /etc/openvpn/server/ta.key 0
+OVPN_EOF
+      {
+        echo "client"
+        echo "dev tun"
+        echo "proto udp"
+        echo "remote $DOMAIN 1194"
+        echo "resolv-retry infinite"
+        echo "nobind"
+        echo "persist-key"
+        echo "persist-tun"
+        echo "remote-cert-tls server"
+        echo "cipher AES-256-GCM"
+        echo "verb 3"
+        echo "key-direction 1"
+        echo "<ca>"
+        cat /etc/openvpn/server/ca.crt
+        echo "</ca>"
+        echo "<cert>"
+        cat /etc/openvpn/easy-rsa/pki/issued/jepong.crt
+        echo "</cert>"
+        echo "<key>"
+        cat /etc/openvpn/easy-rsa/pki/private/jepong.key
+        echo "</key>"
+        echo "<tls-auth>"
+        cat /etc/openvpn/server/ta.key
+        echo "</tls-auth>"
+      } > /root/jepong.ovpn
+      grep -q 'net.ipv4.ip_forward=1' /etc/sysctl.conf 2>/dev/null || echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+      sysctl -p >/dev/null 2>&1 || true
+      iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -j MASQUERADE 2>/dev/null \
+        || iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -j MASQUERADE
+      iptables -t nat -C POSTROUTING -s 10.9.0.0/24 -j MASQUERADE 2>/dev/null \
+        || iptables -t nat -A POSTROUTING -s 10.9.0.0/24 -j MASQUERADE
+      netfilter-persistent save >/dev/null 2>&1 || true
+      svc enable openvpn-server@server; svc start openvpn-server@server
+      log "OpenVPN UDP OK (1194/udp, client: /root/jepong.ovpn)."
+    else
+      warn "OpenVPN manual setup pumalya (walang ca.crt)."
+    fi
+  else
+    warn "openvpn binary wala pa rin pagkatapos ng apt install."
+  fi
 fi
 
 # =============================================================================
@@ -792,6 +877,38 @@ fi
 # =============================================================================
 log "Step 17/18: PPTP (1723/tcp)..."
 apt-get install -y -qq pptpd 2>/dev/null || warn "pptpd hindi ma-install."
+# PPTP fallback para sa Ubuntu 24.04+ (tinanggal ang pptpd sa apt):
+# i-extract ang jammy package nang mano-mano (walang dpkg dependency check).
+# Ang binary ay kailangan lang ng libwrap + libc (parehong available sa noble);
+# ang ppp/bcrelay constraints ay packaging lang, hindi runtime needs.
+if ! command -v pptpd >/dev/null 2>&1; then
+  log "pptpd wala sa apt — sinusubukan ang Ubuntu jammy package (manual extract)..."
+  apt-get install -y -qq libwrap0 ppp 2>/dev/null || true
+  if curl -fsSL -o /tmp/pptpd.deb "http://archive.ubuntu.com/ubuntu/pool/main/p/pptpd/pptpd_1.4.0-12build2_amd64.deb" 2>/dev/null; then
+    mkdir -p /tmp/pptpd-x
+    if dpkg-deb -x /tmp/pptpd.deb /tmp/pptpd-x 2>/dev/null && [ -f /tmp/pptpd-x/usr/sbin/pptpd ]; then
+      cp /tmp/pptpd-x/usr/sbin/pptpd /usr/sbin/pptpd
+      chmod +x /usr/sbin/pptpd
+      cat > /etc/systemd/system/pptpd.service <<'PPTPSVEOF'
+[Unit]
+Description=PoPToP Point to Point Tunneling Server
+After=network.target
+[Service]
+EnvironmentFile=-/etc/default/pptpd
+ExecStart=/usr/sbin/pptpd --fg $DAEMON_OPTS
+[Install]
+WantedBy=multi-user.target
+PPTPSVEOF
+      if [ "$HAS_SYSTEMD" -eq 1 ]; then systemctl daemon-reload; fi
+      log "pptpd binary na-install mula sa jammy package."
+    else
+      warn "pptpd .deb extract pumalya."
+    fi
+    rm -rf /tmp/pptpd.deb /tmp/pptpd-x
+  else
+    warn "pptpd .deb download pumalya."
+  fi
+fi
 PPTP_USER="jepong"
 PPTP_PASS="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
 if command -v pptpd >/dev/null 2>&1; then
@@ -827,7 +944,7 @@ PPOOF
   svc enable pptpd; svc restart pptpd
   log "PPTP OK (1723/tcp)."
 else
-  warn "PPTP hindi na-install (Ubuntu 24.04: tinanggal ng Ubuntu ang pptpd package — hindi available via apt; sa Debian gumagana pa)."
+  warn "PPTP hindi na-install (apt at jammy fallback parehong pumalya)."
 fi
 
 # =============================================================================
