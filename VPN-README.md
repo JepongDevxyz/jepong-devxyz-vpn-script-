@@ -40,13 +40,28 @@ Mga 10-20 minuto ito sa unang takbo (maraming ida-download at iko-compile).
 | Hysteria2 | 4443/udp | password nasa summary, TLS cert ng domain |
 | L2TP/IPSec | 500, 4500, 1701/udp | PSK + user/pass nasa `/etc/jepongvpn/l2tp-creds.txt` |
 | IKEv2 | 500, 4500/udp | EAP user/pass nasa `/etc/jepongvpn/ikev2-creds.txt` |
-| PPTP | 1723/tcp | user/pass nasa `/etc/jepongvpn/pptp-creds.txt`; sa Ubuntu 24.04+ ay via jammy package extract (tinanggal ng Ubuntu ang pptpd sa apt) |
+| PPTP | 1723/tcp | user/pass nasa `/etc/jepongvpn/pptp-creds.txt` (Ubuntu 24.04+: via jammy extract; Debian at Ubuntu 22.04: via apt) |
 | UDP Custom | 36712/udp (range 25000-26000) | PSK nasa summary |
 | SlowDNS (dnstt) | 53/udp | public key nasa summary |
 | SSH WebSocket | 8080/tcp | `ws://domain:8080` -> SSH |
 | nginx | 80, 443/tcp | reverse proxy + Let's Encrypt SSL |
 
 Plus: BBR congestion control, UFW firewall, fail2ban.
+
+## Ano ang gagana sa bawat OS
+
+| Service | Ubuntu 22.04 | Ubuntu 24.04 | Debian 11/12 |
+|---------|--------------|--------------|--------------|
+| SSH, Dropbear, Xray, UDP Custom, SlowDNS, WS, nginx | ✅ | ✅ | ✅ |
+| WireGuard, Shadowsocks, Hysteria2, L2TP/IPSec, IKEv2 | ✅ | ✅ | ✅ |
+| OpenVPN UDP + TCP | ✅ (manual setup) | ✅ (manual setup) | ✅ (manual setup) |
+| PPTP | ✅ (via apt) | ✅ (via jammy package extract) | ✅ (via apt) |
+
+Walang service na tinanggal: bawat installer ay gumagamit lang ng paraan na
+gumagana sa OS niya. Ang Ubuntu 24.04 ay walang `pptpd` sa apt (tinanggal ng
+Ubuntu), kaya ang installer ay nag-e-extract ng jammy package nang mano-mano
+(na-verify: ang binary ay kailangan lang ng libwrap + libc). Ang Debian ay
+gumagamit lang ng apt (may `pptpd` pa sa bookworm).
 
 Pagkatapos ng install, ipi-print ng script ang LAHAT ng credentials
 (UUIDs, passwords, PSK, SlowDNS public key, VLESS/Trojan links).
