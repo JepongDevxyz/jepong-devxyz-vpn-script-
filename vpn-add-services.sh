@@ -35,6 +35,14 @@ svc() {
   fi
 }
 
+# StrongSwan service name: "strongswan-starter" sa Ubuntu 24.04+/Debian 12+, "strongswan" sa luma
+SS_SVC="strongswan"
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
+    SS_SVC="strongswan-starter"
+  fi
+fi
+
 # =============================================================================
 log "WireGuard (UDP 51820)..."
 apt-get install -y -qq wireguard 2>/dev/null || warn "wireguard package hindi ma-install."
@@ -251,6 +259,18 @@ fi
 
 # =============================================================================
 log "OpenVPN TCP (1194/tcp, reuse PKI)..."
+# Kung walang OpenVPN UDP config (posibleng hindi na-install noong una),
+# subukan munang i-install ang UDP via angristan bago gumawa ng TCP instance
+if [ ! -f /etc/openvpn/server/server.conf ] && [ ! -f /etc/openvpn/server.conf ]; then
+  log "Walang OpenVPN UDP config — sinusubukang i-install via angristan..."
+  curl -fsSL -o /root/openvpn-install.sh \
+    https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
+  chmod +x /root/openvpn-install.sh
+  AUTO_INSTALL=y APPROVE_INSTALL=y APPROVE_IP=y IPV6_SUPPORT=n \
+    PORT_CHOICE=1 PROTOCOL_CHOICE=1 DNS=1 COMPRESSION_ENABLED=n CUSTOMIZE_ENC=n \
+    CLIENT=jepong PASS=1 ENDPOINT="$DOMAIN" bash /root/openvpn-install.sh \
+    || warn "angristan OpenVPN install pumalya — tingnan ang output sa itaas."
+fi
 OVPN_CONF=""
 OVPN_DIR=""
 OVPN_SVC=""
@@ -346,7 +366,7 @@ PPEOF
     netfilter-persistent save >/dev/null 2>&1 || true
     printf '%s\n%s\n%s\n' "$L2TP_PSK" "$L2TP_USER" "$L2TP_PASS" > /etc/jepongvpn/l2tp-creds.txt
     chmod 600 /etc/jepongvpn/l2tp-creds.txt
-    svc enable strongswan; svc restart strongswan
+    svc enable "$SS_SVC"; svc restart "$SS_SVC"
     svc enable xl2tpd; svc restart xl2tpd
     log "L2TP/IPSec OK (500,4500,1701/udp)."
   fi
@@ -418,7 +438,7 @@ IKEEOF
   iptables -t nat -C POSTROUTING -s 10.11.0.0/24 -j MASQUERADE 2>/dev/null \
     || iptables -t nat -A POSTROUTING -s 10.11.0.0/24 -j MASQUERADE
   netfilter-persistent save >/dev/null 2>&1 || true
-  svc restart strongswan
+  svc restart "$SS_SVC"
   log "IKEv2 OK (500,4500/udp)."
 else
   warn "IKEv2 hindi na-install."

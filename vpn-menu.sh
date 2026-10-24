@@ -162,7 +162,7 @@ menu_details() {
 menu_status() {
   echo ""
   echo "  --- Service status ---"
-  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom wg-quick@wg0 shadowsocks-libev hysteria openvpn@server-tcp strongswan xl2tpd pptpd fail2ban; do
+  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom wg-quick@wg0 shadowsocks-libev hysteria openvpn@server-tcp openvpn-server@server-tcp strongswan strongswan-starter xl2tpd pptpd fail2ban; do
     st="$(systemctl is-active "$s" 2>/dev/null || echo "unknown")"
     printf "  %-12s %s\n" "$s" "$st"
   done
@@ -170,7 +170,7 @@ menu_status() {
 
 menu_restart() {
   echo ""
-  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom wg-quick@wg0 shadowsocks-libev hysteria openvpn@server-tcp strongswan xl2tpd pptpd fail2ban; do
+  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom wg-quick@wg0 shadowsocks-libev hysteria openvpn@server-tcp openvpn-server@server-tcp strongswan strongswan-starter xl2tpd pptpd fail2ban; do
     if systemctl restart "$s" 2>/dev/null; then
       echo "  [OK] $s restarted"
     else

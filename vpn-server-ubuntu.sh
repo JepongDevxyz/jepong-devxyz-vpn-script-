@@ -62,6 +62,14 @@ svc() {
   fi
 }
 
+# StrongSwan service name: "strongswan-starter" sa Ubuntu 24.04+/Debian 12+, "strongswan" sa luma
+SS_SVC="strongswan"
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
+    SS_SVC="strongswan-starter"
+  fi
+fi
+
 # =============================================================================
 log "Step 1/18: system update + essentials..."
 # Preseed iptables-persistent BAGO i-install para hindi mag-prompt
@@ -706,7 +714,7 @@ PPEOF
   netfilter-persistent save >/dev/null 2>&1 || true
   printf '%s\n%s\n%s\n' "$L2TP_PSK" "$L2TP_USER" "$L2TP_PASS" > /etc/jepongvpn/l2tp-creds.txt
   chmod 600 /etc/jepongvpn/l2tp-creds.txt
-  svc enable strongswan; svc restart strongswan
+  svc enable "$SS_SVC"; svc restart "$SS_SVC"
   svc enable xl2tpd; svc restart xl2tpd
   log "L2TP/IPSec OK (500,4500,1701/udp)."
 else
@@ -775,7 +783,7 @@ IKEEOF
   iptables -t nat -C POSTROUTING -s 10.11.0.0/24 -j MASQUERADE 2>/dev/null \
     || iptables -t nat -A POSTROUTING -s 10.11.0.0/24 -j MASQUERADE
   netfilter-persistent save >/dev/null 2>&1 || true
-  svc restart strongswan
+  svc restart "$SS_SVC"
   log "IKEv2 OK (500,4500/udp)."
 else
   warn "IKEv2 hindi na-install."
