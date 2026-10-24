@@ -270,6 +270,12 @@ if [ ! -f /etc/openvpn/server/server.conf ] && [ ! -f /etc/openvpn/server.conf ]
     PORT_CHOICE=1 PROTOCOL_CHOICE=1 DNS=1 COMPRESSION_ENABLED=n CUSTOMIZE_ENC=n \
     CLIENT=jepong PASS=1 ENDPOINT="$DOMAIN" bash /root/openvpn-install.sh \
     || warn "angristan OpenVPN install pumalya — tingnan ang output sa itaas."
+  # Verification: siguruhing may nalikha talagang config (hindi silent fail tulad noong una)
+  if [ ! -f /etc/openvpn/server/server.conf ] && [ ! -f /etc/openvpn/server.conf ]; then
+    warn "angristan tumakbo pero WALANG server.conf na nalikha — ipadala ang angristan output sa itaas para ma-diagnose."
+  else
+    log "OpenVPN UDP config nalikha — itutuloy ang TCP instance."
+  fi
 fi
 OVPN_CONF=""
 OVPN_DIR=""
