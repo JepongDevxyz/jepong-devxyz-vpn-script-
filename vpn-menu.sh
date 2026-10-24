@@ -115,17 +115,54 @@ menu_details() {
     echo "  [OpenVPN — UDP 1194]"
     echo "  Client file: /root/jepong.ovpn"
   }
+  [ -f /etc/jepongvpn/wireguard-client.conf ] && {
+    echo ""
+    echo "  [WireGuard — UDP 51820]"
+    echo "  Client config: /etc/jepongvpn/wireguard-client.conf"
+  }
+  [ -f /etc/jepongvpn/shadowsocks-pass.txt ] && {
+    echo ""
+    echo "  [Shadowsocks — 8388]"
+    echo "  Method: aes-256-gcm, Pass: $(cat /etc/jepongvpn/shadowsocks-pass.txt)"
+  }
+  [ -f /etc/jepongvpn/hysteria-pass.txt ] && {
+    echo ""
+    echo "  [Hysteria2 — UDP 4443]"
+    echo "  Pass: $(cat /etc/jepongvpn/hysteria-pass.txt)"
+  }
+  [ -f /etc/openvpn/server-tcp.conf ] && {
+    echo ""
+    echo "  [OpenVPN TCP — 1194/tcp]"
+    echo "  Parehong CA/certs ng UDP instance"
+  }
+  [ -f /etc/jepongvpn/l2tp-creds.txt ] && {
+    echo ""
+    echo "  [L2TP/IPSec — 500,4500,1701/udp]"
+    echo "  Creds: /etc/jepongvpn/l2tp-creds.txt"
+  }
+  [ -f /etc/jepongvpn/ikev2-creds.txt ] && {
+    echo ""
+    echo "  [IKEv2 — 500,4500/udp]"
+    echo "  Creds: /etc/jepongvpn/ikev2-creds.txt"
+  }
+  [ -f /etc/jepongvpn/pptp-creds.txt ] && {
+    echo ""
+    echo "  [PPTP — 1723/tcp]"
+    echo "  Creds: /etc/jepongvpn/pptp-creds.txt"
+  }
   echo ""
   echo "  [Ports]"
-  echo "  SSH 22 | Dropbear 109,143 | WS 8080 | OpenVPN 1194/udp"
+  echo "  SSH 22 | Dropbear 109,143 | WS 8080 | OpenVPN 1194/udp+tcp"
   echo "  SlowDNS 53/udp | UDP 36712 + 25000-26000/udp | Xray 443"
+  echo "  WireGuard 51820/udp | Shadowsocks 8388 | Hysteria2 4443/udp"
+  echo "  IPSec 500,4500/udp | L2TP 1701/udp | PPTP 1723/tcp"
   echo "  ================================================="
 }
 
 menu_status() {
   echo ""
   echo "  --- Service status ---"
-  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom fail2ban; do
+  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom wg-quick@wg0 shadowsocks-libev hysteria openvpn@server-tcp strongswan xl2tpd pptpd fail2ban; do
     st="$(systemctl is-active "$s" 2>/dev/null || echo "unknown")"
     printf "  %-12s %s\n" "$s" "$st"
   done
@@ -133,7 +170,7 @@ menu_status() {
 
 menu_restart() {
   echo ""
-  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom fail2ban; do
+  for s in ssh dropbear xray nginx ssh-ws dnstt udp_custom wg-quick@wg0 shadowsocks-libev hysteria openvpn@server-tcp strongswan xl2tpd pptpd fail2ban; do
     if systemctl restart "$s" 2>/dev/null; then
       echo "  [OK] $s restarted"
     else

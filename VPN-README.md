@@ -29,10 +29,18 @@ Mga 10-20 minuto ito sa unang takbo (maraming ida-download at iko-compile).
 |---------|------|---------|
 | OpenSSH | 22/tcp | normal SSH |
 | Dropbear | 109, 143/tcp | lightweight SSH (pang-tunnel) |
-| OpenVPN | 1194/udp | client file: `/root/jepong.ovpn` |
+| OpenVPN | 1194/udp + 1194/tcp | client file: `/root/jepong.ovpn` (UDP); TCP reuses PKI |
 | Xray VLESS | 443/tcp (TLS+WS, path `/vless`) | UUID nasa summary |
 | Xray VMess | 443/tcp (TLS+WS, path `/vmess`) | UUID nasa summary |
 | Xray Trojan | 443/tcp (TLS+WS, path `/trojan`) | password nasa summary |
+| Xray VLESS gRPC | 443/tcp (TLS, serviceName `grpc`) | parehong UUID ng VLESS |
+| Xray VLESS XHTTP | 443/tcp (TLS, path `/xhttp`) | parehong UUID ng VLESS |
+| WireGuard | 51820/udp | client config: `/etc/jepongvpn/wireguard-client.conf` |
+| Shadowsocks | 8388/tcp+udp | method `aes-256-gcm`, password nasa summary |
+| Hysteria2 | 4443/udp | password nasa summary, TLS cert ng domain |
+| L2TP/IPSec | 500, 4500, 1701/udp | PSK + user/pass nasa `/etc/jepongvpn/l2tp-creds.txt` |
+| IKEv2 | 500, 4500/udp | EAP user/pass nasa `/etc/jepongvpn/ikev2-creds.txt` |
+| PPTP | 1723/tcp | user/pass nasa `/etc/jepongvpn/pptp-creds.txt` |
 | UDP Custom | 36712/udp (range 25000-26000) | PSK nasa summary |
 | SlowDNS (dnstt) | 53/udp | public key nasa summary |
 | SSH WebSocket | 8080/tcp | `ws://domain:8080` -> SSH |
