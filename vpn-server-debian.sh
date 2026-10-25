@@ -65,7 +65,8 @@ svc() {
 # StrongSwan service name: "strongswan-starter" sa Ubuntu 24.04+/Debian 12+, "strongswan" sa luma
 SS_SVC="strongswan"
 if command -v systemctl >/dev/null 2>&1; then
-  if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
+  # HUWAG list-unit-files | grep -q dito: sa ilalim ng `set -o pipefail`, ang maagang pag-exit ng grep -q ay pumapalya sa detection 10/10 (proven 2026-10-25). File check = walang pipe, immune.
+  if [ -f /lib/systemd/system/strongswan-starter.service ] || [ -f /etc/systemd/system/strongswan-starter.service ]; then
     SS_SVC="strongswan-starter"
   fi
 fi
@@ -759,7 +760,8 @@ apt-get install -y -qq strongswan-starter 2>/dev/null || true
 systemctl daemon-reload 2>/dev/null || true
 # Re-detect SS_SVC PAGKATAPOS mag-install (ang starter unit ay lumilitaw lang kapag na-install na ang package;
 # ang detection sa itaas ay masyadong maaga para sa fresh install kaya nananatili sa "strongswan" at pumapalya ang restart).
-if systemctl list-unit-files 2>/dev/null | grep -q "^strongswan-starter.service"; then
+# File check (hindi list-unit-files | grep -q): immune sa pipefail/SIGPIPE bug (proven 2026-10-25).
+if [ -f /lib/systemd/system/strongswan-starter.service ] || [ -f /etc/systemd/system/strongswan-starter.service ]; then
   SS_SVC="strongswan-starter"
 fi
 L2TP_PSK="$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
