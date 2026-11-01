@@ -264,6 +264,25 @@ log "OpenVPN TCP (1194/tcp, reuse PKI)..."
 # subukan munang i-install ang UDP via angristan bago gumawa ng TCP instance
 if [ ! -f /etc/openvpn/server/server.conf ] && [ ! -f /etc/openvpn/server.conf ]; then
   log "Walang OpenVPN UDP config — sinusubukang i-install via angristan..."
+  # OpenVPN LATEST (2.7): official repo ng OpenVPN project (release/2.7 channel; supported ang noble + trixie).
+  # Idagdag BAGO ang angristan/manual install para 2.7 ang makuha ng alinman sa dalawa.
+  # Fallback: kapag hindi maabot ang repo/key, distro package pa rin ang mai-install.
+  if [ ! -f /etc/apt/sources.list.d/openvpn-aptrepo.list ]; then
+    mkdir -p /etc/apt/keyrings
+    if curl -fsSL https://swupdate.openvpn.net/repos/repo-public.gpg -o /etc/apt/keyrings/openvpn-repo-public.asc 2>/dev/null; then
+      OVPN_ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+      OVPN_CODENAME="$(. /etc/os-release 2>/dev/null && echo "${VERSION_CODENAME:-}")"
+      if [ -n "$OVPN_CODENAME" ]; then
+        echo "deb [arch=$OVPN_ARCH signed-by=/etc/apt/keyrings/openvpn-repo-public.asc] https://build.openvpn.net/debian/openvpn/release/2.7 $OVPN_CODENAME main" > /etc/apt/sources.list.d/openvpn-aptrepo.list
+        apt-get update -qq 2>/dev/null || warn "OpenVPN official repo hindi ma-update — distro package ang gagamitin."
+        log "OpenVPN official repo (release/2.7, $OVPN_CODENAME) naidagdag."
+      else
+        warn "OS codename hindi mabasa — distro OpenVPN package ang gagamitin."
+      fi
+    else
+      warn "OpenVPN repo key hindi ma-download — distro package ang gagamitin."
+    fi
+  fi
   curl -fsSL -o /root/openvpn-install.sh \
     https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
   chmod +x /root/openvpn-install.sh
@@ -283,6 +302,7 @@ fi
 if [ ! -f /etc/openvpn/server/server.conf ] && [ ! -f /etc/openvpn/server.conf ]; then
   log "Manual OpenVPN setup (apt + easy-rsa)..."
   apt-get install -y -qq openvpn easy-rsa 2>/dev/null || warn "openvpn/easy-rsa hindi ma-install."
+  log "OpenVPN version: $(openvpn --version 2>/dev/null | head -n1 || echo 'hindi nakuha')"
   if command -v openvpn >/dev/null 2>&1; then
     mkdir -p /etc/openvpn/server /etc/openvpn/easy-rsa
     if [ ! -f /etc/openvpn/server/ca.crt ]; then

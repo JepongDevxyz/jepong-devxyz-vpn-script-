@@ -162,7 +162,26 @@ log "Step 4/18: OpenVPN (UDP 1194, manual setup)..."
 if [ -f /etc/openvpn/server/server.conf ] || [ -f /etc/openvpn/server.conf ]; then
   log "OpenVPN naka-install na — skip."
 else
+  # OpenVPN LATEST (2.7): official repo ng OpenVPN project (release/2.7 channel; supported ang noble + trixie).
+  # Fallback: kapag hindi maabot ang repo/key, distro package pa rin ang mai-install (hindi mamamatay ang install).
+  if [ ! -f /etc/apt/sources.list.d/openvpn-aptrepo.list ]; then
+    mkdir -p /etc/apt/keyrings
+    if curl -fsSL https://swupdate.openvpn.net/repos/repo-public.gpg -o /etc/apt/keyrings/openvpn-repo-public.asc 2>/dev/null; then
+      OVPN_ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+      OVPN_CODENAME="$(. /etc/os-release 2>/dev/null && echo "${VERSION_CODENAME:-}")"
+      if [ -n "$OVPN_CODENAME" ]; then
+        echo "deb [arch=$OVPN_ARCH signed-by=/etc/apt/keyrings/openvpn-repo-public.asc] https://build.openvpn.net/debian/openvpn/release/2.7 $OVPN_CODENAME main" > /etc/apt/sources.list.d/openvpn-aptrepo.list
+        apt-get update -qq 2>/dev/null || warn "OpenVPN official repo hindi ma-update — distro package ang gagamitin."
+        log "OpenVPN official repo (release/2.7, $OVPN_CODENAME) naidagdag."
+      else
+        warn "OS codename hindi mabasa — distro OpenVPN package ang gagamitin."
+      fi
+    else
+      warn "OpenVPN repo key hindi ma-download — distro package ang gagamitin."
+    fi
+  fi
   apt-get install -y -qq openvpn easy-rsa 2>/dev/null || warn "openvpn/easy-rsa hindi ma-install."
+  log "OpenVPN version: $(openvpn --version 2>/dev/null | head -n1 || echo 'hindi nakuha')"
   if command -v openvpn >/dev/null 2>&1; then
     mkdir -p /etc/openvpn/server /etc/openvpn/easy-rsa
     if [ ! -f /etc/openvpn/server/ca.crt ]; then
